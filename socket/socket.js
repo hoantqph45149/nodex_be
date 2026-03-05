@@ -6,9 +6,10 @@ import Conversation from "../models/conversation.model.js";
 const app = express();
 
 const server = http.createServer(app);
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 const io = new Server(server, {
   cors: {
-    origin: ["https://twitter-fe-pied.vercel.app", "http://localhost:3000"],
+    origin: [CLIENT_URL, "http://localhost:3000"],
   },
 });
 
