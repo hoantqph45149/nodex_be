@@ -117,13 +117,28 @@ export const sendMessage = async (req, res) => {
 
 export const getMessages = async (req, res) => {
   const { conversationId } = req.params;
+  const { cursor } = req.query;
+  const limit = 20;
 
   try {
-    const messages = await Message.find({ conversationId })
+    const query = { conversationId };
+
+    if (cursor) {
+      query._id = { $lt: cursor };
+    }
+
+    const messages = await Message.find(query)
+      .sort({ _id: -1 })
+      .limit(limit)
       .populate("senderId", "username fullName profileImg")
       .populate("seenBy", "fullName profileImg")
       .populate("replyTo");
-    res.status(200).json({ success: true, data: messages });
+
+    res.status(200).json({
+      success: true,
+      nextCursor: messages.length ? messages[messages.length - 1]._id : null,
+      data: messages,
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
