@@ -159,46 +159,67 @@ export const searchUsersAndGroups = async (req, res) => {
   }
 
   try {
-    const regex = new RegExp(query, "i");
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
-    // Tìm user (trừ bản thân)
+    const skip = (pageNum - 1) * limitNum;
+
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escapedQuery, "i");
+
     const userFilters = {
       $and: [
-        { $or: [{ username: regex }, { fullName: regex }] },
-        { _id: { $ne: req.user._id } },
-      ],
+        {
+          $or: [
+            { username: regex },
+            { fullName: regex }
+          ]
+        },
+        { _id: { $ne: req.user._id } }
+      ]
     };
 
-    const users = await User.find(userFilters)
-      .select("_id username fullName profileImg")
-      .skip(skip)
-      .limit(parseInt(limit));
+    const [users, totalUsers] = await Promise.all([
+      User.find(userFilters)
+        .select("_id username fullName profileImg")
+        .skip(skip)
+        .limit(limitNum),
 
-    const totalUsers = await User.countDocuments(userFilters);
+      User.countDocuments(userFilters)
+    ]);
 
     const groupFilters = {
       isGroup: true,
       name: regex,
-      participants: { $elemMatch: { user: req.user._id } },
+      participants: { $elemMatch: { user: req.user._id } }
     };
 
-    const groups = await Conversation.find(groupFilters)
-      .select("_id name isGroup participants")
-      .populate("participants.user", "_id username fullName profileImg");
+    const [groups, totalGroups] = await Promise.all([
+      Conversation.find(groupFilters)
+        .select("_id name isGroup participants")
+        .populate("participants.user", "_id username fullName profileImg")
+        .skip(skip)
+        .limit(limitNum),
 
-    const totalGroups = await Conversation.countDocuments(groupFilters);
+      Conversation.countDocuments(groupFilters)
+    ]);
+
+    const totalItems = totalUsers + totalGroups;
+    const totalPages = Math.ceil(totalItems / limitNum);
 
     res.status(200).json({
       users,
       groups,
       pagination: {
+        page: pageNum,
+        limit: limitNum,
         totalUsers,
         totalGroups,
-        page: parseInt(page),
-        limit: parseInt(limit),
-      },
+        totalItems,
+        totalPages
+      }
     });
+
   } catch (error) {
     console.error("Search error:", error);
     res.status(500).json({ message: "Server error" });

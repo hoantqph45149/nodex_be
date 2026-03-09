@@ -3,6 +3,7 @@ import Message from "../models/message.model.js";
 import { io, onlineUsers } from "../socket/socket.js";
 import { uploadToCloudinary } from "../lib/utils/uploadToCloudinary.js";
 import User from "../models/user.model.js";
+import mongoose from "mongoose";
 
 export const sendMessage = async (req, res) => {
   const { conversationId, receiverId, content, replyTo } = req.body;
@@ -121,26 +122,46 @@ export const getMessages = async (req, res) => {
   const limit = 20;
 
   try {
-    const query = { conversationId };
+    const query = {
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+    };
 
     if (cursor) {
-      query._id = { $lt: cursor };
+      query._id = {
+        $lt: new mongoose.Types.ObjectId(cursor),
+      };
     }
 
     const messages = await Message.find(query)
       .sort({ _id: -1 })
-      .limit(limit)
+      .limit(limit + 1) // lấy dư 1 cái để check còn page không
       .populate("senderId", "username fullName profileImg")
       .populate("seenBy", "fullName profileImg")
       .populate("replyTo");
 
+    let nextCursor = null;
+    let hasMore = false;
+
+    if (messages.length > limit) {
+      hasMore = true;
+      messages.pop(); 
+    }
+
+    if (messages.length) {
+      nextCursor = messages[messages.length - 1]._id;
+    }
+
     res.status(200).json({
       success: true,
-      nextCursor: messages.length ? messages[messages.length - 1]._id : null,
       data: messages,
+      nextCursor,
+      hasMore,
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };
 
